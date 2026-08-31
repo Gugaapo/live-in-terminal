@@ -28,9 +28,26 @@ WRAP_OFF = "\x1b[?7l"  # prevent wrap from shredding the frame
 WRAP_ON = "\x1b[?7h"
 
 DEFAULT_CHAT_LINES = 5
-# Fixed decode grid — resampled in Python on each frame for live resize.
+# Default decode grid — resampled in Python on each frame for live resize.
 DECODE_WIDTH = 160
 DECODE_HEIGHT = 48
+DECODE_MAX = 640  # hard cap to avoid melting CPU/RAM
+
+
+def parse_decode_size(value: str) -> tuple[int, int]:
+    """Parse WxH (e.g. 240x72). Raises ValueError on bad input."""
+    text = value.strip().lower().replace("*", "x").replace(",", "x")
+    if "x" not in text:
+        raise ValueError("expected WIDTHxHEIGHT (e.g. 240x72)")
+    left, right = text.split("x", 1)
+    if not left.isdigit() or not right.isdigit():
+        raise ValueError("expected WIDTHxHEIGHT with integer parts (e.g. 240x72)")
+    w, h = int(left), int(right)
+    if w < 16 or h < 9:
+        raise ValueError("decode size must be at least 16x9")
+    if w > DECODE_MAX or h > DECODE_MAX:
+        raise ValueError(f"decode size must be at most {DECODE_MAX}x{DECODE_MAX}")
+    return w, h
 
 
 def _enable_windows_ansi() -> None:
@@ -62,6 +79,8 @@ class PlayerOptions:
     use_alt_screen: bool = True
     chat: bool = True
     chat_lines: int = DEFAULT_CHAT_LINES
+    decode_width: int = DECODE_WIDTH
+    decode_height: int = DECODE_HEIGHT
 
 
 def _layout(
@@ -149,7 +168,8 @@ def play(options: PlayerOptions) -> int:
     charset = resolve_charset(options.chars)
     use_color = supports_truecolor() if options.color is None else options.color
     fps = max(1.0, min(30.0, options.fps))
-    decode_w, decode_h = DECODE_WIDTH, DECODE_HEIGHT
+    decode_w = max(16, min(DECODE_MAX, options.decode_width))
+    decode_h = max(9, min(DECODE_MAX, options.decode_height))
 
     out = sys.stdout
     entered_alt = False

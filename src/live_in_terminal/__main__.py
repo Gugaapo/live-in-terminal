@@ -6,7 +6,13 @@ import argparse
 import sys
 
 from live_in_terminal import __version__
-from live_in_terminal.player import PlayerOptions, play
+from live_in_terminal.player import (
+    DECODE_HEIGHT,
+    DECODE_WIDTH,
+    PlayerOptions,
+    parse_decode_size,
+    play,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +57,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force truecolor ANSI even if auto-detect is unsure",
     )
     p.add_argument(
+        "--decode",
+        default=f"{DECODE_WIDTH}x{DECODE_HEIGHT}",
+        metavar="WxH",
+        help=(
+            f"ffmpeg decode grid before terminal resample "
+            f"(default: {DECODE_WIDTH}x{DECODE_HEIGHT}; try 240x72 for fullscreen)"
+        ),
+    )
+    p.add_argument(
         "--no-chat",
         action="store_true",
         help="Hide Twitch chat under the video",
@@ -78,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.chat_lines < 1:
         parser.error("--chat-lines must be >= 1")
 
+    try:
+        decode_w, decode_h = parse_decode_size(args.decode)
+    except ValueError as exc:
+        parser.error(f"--decode: {exc}")
+
     color: bool | None
     if args.no_color:
         color = False
@@ -95,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         color=color,
         chat=not args.no_chat,
         chat_lines=args.chat_lines,
+        decode_width=decode_w,
+        decode_height=decode_h,
     )
     return play(options)
 

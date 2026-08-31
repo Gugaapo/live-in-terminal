@@ -68,6 +68,7 @@ chmod +x watch.sh
 ./watch.sh oMeiaUm
 ./watch.sh https://www.twitch.tv/oMeiaUm --fps 12 --quality 480p
 ./watch.sh oMeiaUm --no-color --chars blocks
+./watch.sh oMeiaUm --quality 720p --fps 15 --decode 240x72
 ```
 
 **Windows (PowerShell):**
@@ -76,6 +77,7 @@ chmod +x watch.sh
 .\watch.ps1 oMeiaUm
 .\watch.ps1 oMeiaUm --fps 10 --no-color
 .\watch.ps1 https://www.twitch.tv/oMeiaUm --quality 720p
+.\watch.ps1 oMeiaUm --quality 720p --fps 15 --decode 240x72
 ```
 
 **Direct module:**
@@ -93,6 +95,7 @@ lit oMeiaUm
 |------|-------------|
 | `--fps N` | Target FPS (default `12`, capped 1–30) |
 | `--width N` | ASCII width in characters (default: terminal width) |
+| `--decode WxH` | ffmpeg decode grid before resample (default `160x48`; try `240x72` or `320x90` for fullscreen) |
 | `--quality` | `best`, `worst`, `1080p`, `720p`, `480p`, `360p`, `160p` |
 | `--chars` | `classic`, `blocks`, or a custom dark→bright ramp |
 | `--no-color` | Grayscale characters only |
@@ -111,4 +114,5 @@ Live chat is on by default: the last **5** messages appear under the status line
 - Video only in v1 (no audio).  
 - Legacy Windows `conhost` may show poor colors; prefer Windows Terminal.  
 - Lower `--quality` / `--fps` / `--width` if the terminal cannot keep up.  
-- Resizing the window is supported: frames are decoded at a fixed grid and resampled to the live terminal size (no stream restart).  
+- Resizing the window is supported: frames are decoded at a fixed grid (`--decode`) and resampled to the live terminal size (no stream restart).  
+- For sharper fullscreen, raise `--decode` (e.g. `240x72`) and `--quality 720p`; higher values cost more CPU.  
