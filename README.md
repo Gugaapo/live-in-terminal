@@ -73,18 +73,18 @@ chmod +x watch.sh
 **Windows (PowerShell):**
 
 ```powershell
-.\watch.ps1 shroud
-.\watch.ps1 shroud --fps 10 --no-color
-.\watch.ps1 https://www.twitch.tv/shroud --quality 720p
+.\watch.ps1 oMeiaUm
+.\watch.ps1 oMeiaUm --fps 10 --no-color
+.\watch.ps1 https://www.twitch.tv/oMeiaUm --quality 720p
 ```
 
 **Direct module:**
 
 ```bash
-python -m live_in_terminal shroud --fps 12
+python -m live_in_terminal oMeiaUm --fps 12
 # after pip install -e .:
-live-in-terminal shroud
-lit shroud
+live-in-terminal oMeiaUm
+lit oMeiaUm
 ```
 
 ### Options
