@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "live-in-terminal"
+version = "0.1.0"
+description = "Watch live Twitch streams as ASCII art in your terminal"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "live-in-terminal" }]
+keywords = ["twitch", "ascii", "terminal", "livestream"]
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.scripts]
+live-in-terminal = "live_in_terminal.__main__:main"
+lit = "live_in_terminal.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
