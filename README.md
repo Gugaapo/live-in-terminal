@@ -65,9 +65,9 @@ Or skip `pip install -e .` and use the launchers (they set `PYTHONPATH=src` when
 
 ```bash
 chmod +x watch.sh
-./watch.sh shroud
-./watch.sh https://www.twitch.tv/shroud --fps 12 --quality 480p
-./watch.sh shroud --no-color --chars blocks
+./watch.sh oMeiaUm
+./watch.sh https://www.twitch.tv/oMeiaUm --fps 12 --quality 480p
+./watch.sh oMeiaUm --no-color --chars blocks
 ```
 
 **Windows (PowerShell):**
