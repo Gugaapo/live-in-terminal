@@ -32,6 +32,31 @@ def _luminance(r: int, g: int, b: int) -> float:
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
 
 
+def resize_rgb(rgb: bytes, src_w: int, src_h: int, dst_w: int, dst_h: int) -> bytes:
+    """Nearest-neighbor resize of an RGB24 buffer."""
+    if src_w < 1 or src_h < 1 or dst_w < 1 or dst_h < 1:
+        raise ValueError("dimensions must be >= 1")
+    if src_w == dst_w and src_h == dst_h:
+        return rgb
+    expected = src_w * src_h * 3
+    if len(rgb) < expected:
+        raise ValueError("rgb buffer shorter than src dimensions")
+
+    out = bytearray(dst_w * dst_h * 3)
+    for y in range(dst_h):
+        sy = (y * src_h) // dst_h
+        src_row = sy * src_w * 3
+        dst_row = y * dst_w * 3
+        for x in range(dst_w):
+            sx = (x * src_w) // dst_w
+            si = src_row + sx * 3
+            di = dst_row + x * 3
+            out[di] = rgb[si]
+            out[di + 1] = rgb[si + 1]
+            out[di + 2] = rgb[si + 2]
+    return bytes(out)
+
+
 def frame_to_ascii(
     rgb: bytes,
     width: int,

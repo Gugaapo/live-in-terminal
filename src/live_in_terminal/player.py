@@ -7,7 +7,12 @@ import sys
 import time
 from dataclasses import dataclass
 
-from live_in_terminal.ascii import frame_to_ascii, resolve_charset, supports_truecolor
+from live_in_terminal.ascii import (
+    frame_to_ascii,
+    resize_rgb,
+    resolve_charset,
+    supports_truecolor,
+)
 from live_in_terminal.chat import TwitchChat, format_chat_block
 from live_in_terminal.ffmpeg_pipe import FrameSource, open_rgb_pipe
 from live_in_terminal.stream import StreamResolveError, require_ffmpeg, resolve_stream_url
@@ -19,10 +24,13 @@ CLEAR_SCREEN = "\x1b[2J"
 CLEAR_EOS = "\x1b[0J"  # clear from cursor to end of screen
 ALT_ENTER = "\x1b[?1049h"
 ALT_LEAVE = "\x1b[?1049l"
-WRAP_OFF = "\x1b[?7l"  # prevent resize wrap from shredding the frame
+WRAP_OFF = "\x1b[?7l"  # prevent wrap from shredding the frame
 WRAP_ON = "\x1b[?7h"
 
 DEFAULT_CHAT_LINES = 5
+# Fixed decode grid — resampled in Python on each frame for live resize.
+DECODE_WIDTH = 160
+DECODE_HEIGHT = 48
 
 
 def _enable_windows_ansi() -> None:
@@ -122,6 +130,7 @@ def _drain_stderr(src: FrameSource) -> bytes:
     if not src.process.stderr:
         return b""
     try:
+        # Non-blocking-ish: only read after process has exited (caller should ensure).
         return src.process.stderr.read() or b""
     except OSError:
         return b""
@@ -140,6 +149,7 @@ def play(options: PlayerOptions) -> int:
     charset = resolve_charset(options.chars)
     use_color = supports_truecolor() if options.color is None else options.color
     fps = max(1.0, min(30.0, options.fps))
+    decode_w, decode_h = DECODE_WIDTH, DECODE_HEIGHT
 
     out = sys.stdout
     entered_alt = False
@@ -147,6 +157,7 @@ def play(options: PlayerOptions) -> int:
     frames_seen = 0
     ffmpeg_err = b""
     chat_client: TwitchChat | None = None
+    prev_layout: tuple[int, int] | None = None
 
     try:
         _enable_windows_ansi()
@@ -164,54 +175,44 @@ def play(options: PlayerOptions) -> int:
             chat_client.start()
 
         frame_interval = 1.0 / fps
-        # Outer loop: restart ffmpeg whenever the terminal grid changes.
-        while True:
-            width, height = _layout(options.width, options.chat, chat_lines)
-            resized = False
+        with open_rgb_pipe(
+            stream_url, decode_w, decode_h, fps, ffmpeg_path=ffmpeg
+        ) as src:
+            next_deadline = time.perf_counter()
+            for rgb in src.frames_interruptible():
+                width, height = _layout(options.width, options.chat, chat_lines)
+                if prev_layout is not None and (width, height) != prev_layout:
+                    # Full clear once when the grid changes; avoid blanking every frame.
+                    out.write(CLEAR_SCREEN)
+                    out.flush()
+                prev_layout = (width, height)
 
-            with open_rgb_pipe(
-                stream_url, width, height, fps, ffmpeg_path=ffmpeg
-            ) as src:
-                next_deadline = time.perf_counter()
-                for rgb in src.frames():
-                    new_w, new_h = _layout(options.width, options.chat, chat_lines)
-                    if (new_w, new_h) != (width, height):
-                        resized = True
-                        out.write(CLEAR_SCREEN + CURSOR_HOME)
-                        out.flush()
-                        break
+                frames_seen += 1
+                now = time.perf_counter()
+                if now < next_deadline:
+                    time.sleep(next_deadline - now)
+                next_deadline = time.perf_counter() + frame_interval
 
-                    frames_seen += 1
-                    now = time.perf_counter()
-                    if now < next_deadline:
-                        time.sleep(next_deadline - now)
-                    next_deadline = time.perf_counter() + frame_interval
+                view = resize_rgb(rgb, decode_w, decode_h, width, height)
+                _render_frame(
+                    out,
+                    rgb=view,
+                    width=width,
+                    height=height,
+                    charset=charset,
+                    use_color=use_color,
+                    channel=channel,
+                    fps=fps,
+                    chat_client=chat_client,
+                    chat_lines=chat_lines,
+                )
 
-                    _render_frame(
-                        out,
-                        rgb=rgb,
-                        width=width,
-                        height=height,
-                        charset=charset,
-                        use_color=use_color,
-                        channel=channel,
-                        fps=fps,
-                        chat_client=chat_client,
-                        chat_lines=chat_lines,
-                    )
+                if src.process.poll() is not None:
+                    # Allow draining remaining queued frames; stop if process died
+                    # and queue is about to end — frames_interruptible handles EOF.
+                    pass
 
-                    if src.process.poll() is not None:
-                        break
-
-                ffmpeg_err = _drain_stderr(src) or ffmpeg_err
-
-            if resized:
-                # Brief pause so rapid drag-resizes coalesce a bit.
-                time.sleep(0.05)
-                continue
-
-            # Stream ended (or ffmpeg exited) without a resize.
-            break
+            ffmpeg_err = _drain_stderr(src)
 
         if frames_seen == 0:
             msg = ffmpeg_err.decode("utf-8", errors="replace").strip()

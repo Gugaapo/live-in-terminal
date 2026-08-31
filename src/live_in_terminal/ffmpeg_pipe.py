@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import queue
 import subprocess
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 
 @dataclass
@@ -27,6 +29,60 @@ class FrameSource:
             if not buf or len(buf) < size:
                 break
             yield buf
+
+    def frames_interruptible(self, poll_s: float = 0.25) -> Iterator[bytes]:
+        """
+        Yield frames via a reader thread so waiting can be interrupted (Ctrl+C).
+
+        Blocking pipe reads on Windows often swallow KeyboardInterrupt; polling
+        a queue lets the main thread stay responsive.
+        """
+        q: queue.Queue[bytes | None] = queue.Queue(maxsize=2)
+        stop = threading.Event()
+
+        def _reader() -> None:
+            try:
+                for frame in self.frames():
+                    if stop.is_set():
+                        break
+                    while not stop.is_set():
+                        try:
+                            q.put(frame, timeout=0.25)
+                            break
+                        except queue.Full:
+                            # Drop oldest buffered frame to stay live.
+                            try:
+                                q.get_nowait()
+                            except queue.Empty:
+                                pass
+            finally:
+                try:
+                    q.put_nowait(None)
+                except queue.Full:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        q.put_nowait(None)
+                    except queue.Full:
+                        pass
+
+        thread = threading.Thread(target=_reader, name="ffmpeg-frames", daemon=True)
+        thread.start()
+        try:
+            while True:
+                try:
+                    item = q.get(timeout=poll_s)
+                except queue.Empty:
+                    if self.process.poll() is not None and not thread.is_alive():
+                        break
+                    continue
+                if item is None:
+                    break
+                yield item
+        finally:
+            stop.set()
 
     def close(self) -> None:
         if self.process.stdout:
@@ -59,7 +115,7 @@ def open_rgb_pipe(
     """
     Start ffmpeg reading stream_url and writing raw rgb24 frames to stdout.
 
-    width/height are the ASCII cell grid (one pixel per character).
+    width/height are the decode grid (later resampled to the terminal).
     """
     if width < 1 or height < 1:
         raise ValueError("width and height must be >= 1")
