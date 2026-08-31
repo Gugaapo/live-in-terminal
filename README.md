@@ -111,3 +111,4 @@ Live chat is on by default: the last **5** messages appear under the status line
 - Video only in v1 (no audio).  
 - Legacy Windows `conhost` may show poor colors; prefer Windows Terminal.  
 - Lower `--quality` / `--fps` / `--width` if the terminal cannot keep up.  
+- Resizing the window is supported: the player rebuilds the ASCII grid and briefly restarts the video pipe (a short hitch is normal).  

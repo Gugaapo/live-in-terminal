@@ -74,7 +74,6 @@ def open_rgb_pipe(
         "error",
         "-headers",
         headers,
-        "-re",
         "-i",
         stream_url,
         "-an",
