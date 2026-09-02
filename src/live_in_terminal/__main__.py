@@ -87,6 +87,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of chat messages shown below the video (default: 5)",
     )
     p.add_argument(
+        "--record",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help=(
+            "Record pixel-art output to an MP4 file via ffmpeg "
+            "(default path: <channel>_<timestamp>.mp4)"
+        ),
+    )
+    p.add_argument(
+        "--record-scale",
+        type=int,
+        default=8,
+        help="Pixels per art pixel in the recording (default: 8)",
+    )
+    p.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -102,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("use only one of --color / --no-color")
     if args.chat_lines < 1:
         parser.error("--chat-lines must be >= 1")
+    if args.record_scale < 1:
+        parser.error("--record-scale must be >= 1")
 
     try:
         decode_w, decode_h = parse_decode_size(args.decode)
@@ -133,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
         chat_lines=args.chat_lines,
         decode_width=decode_w,
         decode_height=decode_h,
+        record_path=args.record,
+        record_scale=args.record_scale,
     )
     return play(options)
 
