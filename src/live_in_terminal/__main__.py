@@ -13,12 +13,13 @@ from live_in_terminal.player import (
     parse_decode_size,
     play,
 )
+from live_in_terminal.render import RenderMode, resolve_render_mode
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="live-in-terminal",
-        description="Watch a live Twitch stream as ASCII art in your terminal.",
+        description="Watch a live Twitch stream as terminal pixel art.",
     )
     p.add_argument(
         "channel",
@@ -34,7 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--width",
         type=int,
         default=None,
-        help="ASCII width in characters (default: full terminal width)",
+        help="Terminal width in characters (default: full terminal width)",
+    )
+    p.add_argument(
+        "--mode",
+        default="compact",
+        choices=[m.value for m in RenderMode],
+        help=(
+            "Render style: compact (Unicode half-block, default), "
+            "blocks (colored spaces), or ascii (legacy character ramp)"
+        ),
     )
     p.add_argument(
         "--quality",
@@ -44,17 +54,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--chars",
         default="classic",
-        help="Charset: classic, blocks, or a custom dark-to-bright ramp string",
+        help="Charset for --mode ascii: classic, blocks, or a custom dark-to-bright ramp",
     )
     p.add_argument(
         "--no-color",
         action="store_true",
-        help="Disable truecolor ANSI (grayscale characters only)",
+        help="Disable ANSI colors (grayscale block density)",
     )
     p.add_argument(
         "--color",
         action="store_true",
-        help="Force truecolor ANSI even if auto-detect is unsure",
+        help="Use 24-bit truecolor instead of 256-color palette",
     )
     p.add_argument(
         "--decode",
@@ -106,11 +116,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         color = None
 
+    try:
+        render_mode = resolve_render_mode(args.mode)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     options = PlayerOptions(
         channel_or_url=args.channel,
         fps=args.fps,
         width=args.width,
         quality=args.quality,
+        mode=render_mode,
         chars=args.chars,
         color=color,
         chat=not args.no_chat,
