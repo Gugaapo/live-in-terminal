@@ -66,17 +66,20 @@ def resize_rgb(rgb: bytes, src_w: int, src_h: int, dst_w: int, dst_h: int) -> by
         raise ValueError("rgb buffer shorter than src dimensions")
 
     out = bytearray(dst_w * dst_h * 3)
+    src_row_bytes = src_w * 3
+    dst_row_bytes = dst_w * 3
+    # Precompute x source indices for the row.
+    x_src = [(x * src_w) // dst_w for x in range(dst_w)]
     for y in range(dst_h):
         sy = (y * src_h) // dst_h
-        src_row = sy * src_w * 3
-        dst_row = y * dst_w * 3
-        for x in range(dst_w):
-            sx = (x * src_w) // dst_w
-            si = src_row + sx * 3
-            di = dst_row + x * 3
-            out[di] = rgb[si]
-            out[di + 1] = rgb[si + 1]
-            out[di + 2] = rgb[si + 2]
+        src_row = memoryview(rgb)[sy * src_row_bytes : (sy + 1) * src_row_bytes]
+        dst = y * dst_row_bytes
+        for x, sx in enumerate(x_src):
+            si = sx * 3
+            di = dst + x * 3
+            out[di] = src_row[si]
+            out[di + 1] = src_row[si + 1]
+            out[di + 2] = src_row[si + 2]
     return bytes(out)
 
 

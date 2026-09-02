@@ -27,6 +27,15 @@ class ChatMessage:
     color_hex: str | None = None  # Twitch tag e.g. #FF0000, if set
 
 
+@dataclass(frozen=True)
+class ChatRow:
+    """One chat line prepared for terminal or video overlay rendering."""
+
+    user: str
+    text: str
+    user_color: tuple[int, int, int]
+
+
 # Distinct fallback hues when Twitch sends no user color.
 _FALLBACK_RGB: tuple[tuple[int, int, int], ...] = (
     (255, 99, 71),    # tomato
@@ -217,6 +226,31 @@ class TwitchChat:
         if not self._connected:
             self._connected = True
             self._set_status("chat live")
+
+
+def prepare_chat_rows(
+    messages: list[ChatMessage],
+    width: int,
+    lines: int = 5,
+    *,
+    color: bool = True,
+) -> list[ChatRow]:
+    """Build structured chat rows for recording overlays."""
+    width = max(8, width)
+    shown = messages[-lines:]
+    rows: list[ChatRow] = []
+    for msg in shown:
+        user = msg.user.replace("\n", " ")
+        text = msg.text.replace("\r", "").replace("\n", " ").strip()
+        if not text:
+            continue
+        prefix_plain = f"{user}: "
+        avail = max(1, width - len(prefix_plain))
+        if len(text) > avail:
+            text = text[: max(1, avail - 1)] + "…"
+        user_color = user_rgb(user, msg.color_hex) if color else (180, 180, 180)
+        rows.append(ChatRow(user=user, text=text, user_color=user_color))
+    return rows
 
 
 def format_chat_block(
