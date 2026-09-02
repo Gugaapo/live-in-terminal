@@ -1,4 +1,4 @@
-"""Playback loop: resolve stream, decode frames, render ASCII + chat."""
+"""Playback loop: resolve stream, decode frames, render pixel art + chat."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ import sys
 import time
 from dataclasses import dataclass
 
-from live_in_terminal.ascii import (
-    frame_to_ascii,
+from live_in_terminal.render import (
+    RenderMode,
+    pixel_dimensions,
+    render_frame,
     resize_rgb,
     resolve_charset,
     supports_truecolor,
@@ -74,6 +76,7 @@ class PlayerOptions:
     fps: float = 12.0
     width: int | None = None
     quality: str = "best"
+    mode: RenderMode = RenderMode.COMPACT
     chars: str = "classic"
     color: bool | None = None  # None = auto
     use_alt_screen: bool = True
@@ -87,23 +90,25 @@ def _layout(
     opt_width: int | None,
     chat: bool,
     chat_lines: int,
-) -> tuple[int, int]:
+    mode: RenderMode,
+) -> tuple[int, int, int]:
     """
-    Returns (cols, video_rows) for the current terminal size.
+    Returns (pixel_width, pixel_height, terminal_video_rows).
 
     Reserves 1 status line and optional chat rows below the video.
     """
     cols, rows = shutil.get_terminal_size(fallback=(80, 24))
     cols = max(2, cols)
     if opt_width is not None:
-        cols = max(2, min(cols, opt_width))
+        cols = max(2, min(opt_width, cols))
 
     below = 1  # status
     if chat:
         below += max(1, chat_lines)
 
     video_rows = max(2, rows - below)
-    return cols, video_rows
+    pixel_w, pixel_h = pixel_dimensions(cols, video_rows, mode)
+    return pixel_w, pixel_h, video_rows
 
 
 def _render_frame(
@@ -112,28 +117,41 @@ def _render_frame(
     rgb: bytes,
     width: int,
     height: int,
+    terminal_cols: int,
+    mode: RenderMode,
     charset: str,
     use_color: bool,
+    use_truecolor: bool,
     channel: str,
     fps: float,
     chat_client: TwitchChat | None,
     chat_lines: int,
 ) -> None:
-    art = frame_to_ascii(rgb, width, height, chars=charset, color=use_color)
+    art = render_frame(
+        rgb,
+        width,
+        height,
+        mode=mode,
+        chars=charset,
+        color=use_color,
+        truecolor=use_truecolor,
+    )
     chat_note = ""
     if chat_client is not None:
         st = chat_client.status
         if st and st != "chat live":
             chat_note = f" | {st}"
-    status = f"{channel} | {width}x{height} @ {fps:.0f}fps{chat_note} | Ctrl+C quit"
-    if len(status) > width:
-        status = status[: max(1, width - 1)] + "…"
+    status = (
+        f"{channel} | {mode.value} {width}x{height} @ {fps:.0f}fps{chat_note} | Ctrl+C quit"
+    )
+    if len(status) > terminal_cols:
+        status = status[: max(1, terminal_cols - 1)] + "…"
 
     parts = [CURSOR_HOME, art, "\n", status]
     if chat_client is not None:
         block = format_chat_block(
             chat_client.latest(),
-            width=width,
+            width=terminal_cols,
             lines=chat_lines,
             color=use_color,
             placeholder="",
@@ -166,7 +184,19 @@ def play(options: PlayerOptions) -> int:
 
     chat_lines = max(1, options.chat_lines)
     charset = resolve_charset(options.chars)
-    use_color = supports_truecolor() if options.color is None else options.color
+    if options.mode == RenderMode.ASCII:
+        if options.color is False:
+            use_color = False
+            use_truecolor = False
+        elif options.color is True:
+            use_color = True
+            use_truecolor = True
+        else:
+            use_truecolor = supports_truecolor()
+            use_color = use_truecolor
+    else:
+        use_color = options.color is not False
+        use_truecolor = options.color is True
     fps = max(1.0, min(30.0, options.fps))
     decode_w = max(16, min(DECODE_MAX, options.decode_width))
     decode_h = max(9, min(DECODE_MAX, options.decode_height))
@@ -177,7 +207,7 @@ def play(options: PlayerOptions) -> int:
     frames_seen = 0
     ffmpeg_err = b""
     chat_client: TwitchChat | None = None
-    prev_layout: tuple[int, int] | None = None
+    prev_layout: tuple[int, int, int] | None = None
 
     try:
         _enable_windows_ansi()
@@ -200,12 +230,17 @@ def play(options: PlayerOptions) -> int:
         ) as src:
             next_deadline = time.perf_counter()
             for rgb in src.frames_interruptible():
-                width, height = _layout(options.width, options.chat, chat_lines)
-                if prev_layout is not None and (width, height) != prev_layout:
+                pixel_w, pixel_h, video_rows = _layout(
+                    options.width, options.chat, chat_lines, options.mode
+                )
+                terminal_cols, _ = shutil.get_terminal_size(fallback=(80, 24))
+                if options.width is not None:
+                    terminal_cols = max(2, min(terminal_cols, options.width))
+                if prev_layout is not None and (pixel_w, pixel_h, video_rows) != prev_layout:
                     # Full clear once when the grid changes; avoid blanking every frame.
                     out.write(CLEAR_SCREEN)
                     out.flush()
-                prev_layout = (width, height)
+                prev_layout = (pixel_w, pixel_h, video_rows)
 
                 frames_seen += 1
                 now = time.perf_counter()
@@ -213,14 +248,17 @@ def play(options: PlayerOptions) -> int:
                     time.sleep(next_deadline - now)
                 next_deadline = time.perf_counter() + frame_interval
 
-                view = resize_rgb(rgb, decode_w, decode_h, width, height)
+                view = resize_rgb(rgb, decode_w, decode_h, pixel_w, pixel_h)
                 _render_frame(
                     out,
                     rgb=view,
-                    width=width,
-                    height=height,
+                    width=pixel_w,
+                    height=pixel_h,
+                    terminal_cols=terminal_cols,
+                    mode=options.mode,
                     charset=charset,
                     use_color=use_color,
+                    use_truecolor=use_truecolor,
                     channel=channel,
                     fps=fps,
                     chat_client=chat_client,

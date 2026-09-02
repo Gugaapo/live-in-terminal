@@ -1,6 +1,6 @@
 # live-in-terminal
 
-Watch a **live Twitch stream** as ASCII art in your terminal (color when supported).
+Watch a **live Twitch stream** as colored pixel art in your terminal — the same half-block / background-color technique used by [pokemon-terminal-art](https://github.com/shinya/pokemon-terminal-art).
 
 Works on **Linux** (`watch.sh`) and **Windows** (`watch.ps1`) via a shared Python core.
 
@@ -8,7 +8,9 @@ Works on **Linux** (`watch.sh`) and **Windows** (`watch.ps1`) via a shared Pytho
 
 1. **streamlink** (preferred) or **yt-dlp** resolves `https://twitch.tv/<channel>` to an HLS URL  
 2. **ffmpeg** decodes frames to raw RGB  
-3. Python maps pixels to characters (optional truecolor ANSI) and redraws the terminal  
+3. Python renders each frame with **256-color ANSI** (default), optional **24-bit truecolor**, or legacy ASCII  
+4. **Compact** mode uses Unicode half-blocks (`▀`) — two pixel rows per terminal row, like pokemon-terminal-art's compact style  
+5. **Blocks** mode uses colored background spaces (two per pixel), like pokemon-terminal-art's normal style  
 
 Latency is typically a few seconds (HLS). Aim for ~8–15 FPS depending on terminal size and CPU.
 
@@ -40,7 +42,7 @@ pip install streamlink
 # or: pip install yt-dlp
 ```
 
-Use [Windows Terminal](https://aka.ms/terminal) for reliable ANSI / truecolor.
+Use [Windows Terminal](https://aka.ms/terminal) for reliable ANSI / 256-color output.
 
 ## Setup
 
@@ -59,6 +61,7 @@ python -m pip install streamlink   # or: yt-dlp
 ```
 
 Or skip `pip install -e .` and use the launchers (they set `PYTHONPATH=src` when the package is not installed). Activate the venv first so `streamlink` is available to the player.
+
 ## Usage
 
 **Linux / macOS / WSL:**
@@ -67,7 +70,8 @@ Or skip `pip install -e .` and use the launchers (they set `PYTHONPATH=src` when
 chmod +x watch.sh
 ./watch.sh oMeiaUm
 ./watch.sh https://www.twitch.tv/oMeiaUm --fps 12 --quality 480p
-./watch.sh oMeiaUm --no-color --chars blocks
+./watch.sh oMeiaUm --mode blocks --color
+./watch.sh oMeiaUm --mode ascii --no-color
 ./watch.sh oMeiaUm --quality 720p --fps 15 --decode 240x72
 ```
 
@@ -75,7 +79,7 @@ chmod +x watch.sh
 
 ```powershell
 .\watch.ps1 oMeiaUm
-.\watch.ps1 oMeiaUm --fps 10 --no-color
+.\watch.ps1 oMeiaUm --fps 10 --mode compact
 .\watch.ps1 https://www.twitch.tv/oMeiaUm --quality 720p
 .\watch.ps1 oMeiaUm --quality 720p --fps 15 --decode 240x72
 ```
@@ -94,16 +98,25 @@ lit oMeiaUm
 | Flag | Description |
 |------|-------------|
 | `--fps N` | Target FPS (default `12`, capped 1–30) |
-| `--width N` | ASCII width in characters (default: terminal width) |
+| `--width N` | Terminal width in characters (default: terminal width) |
+| `--mode` | `compact` (half-block ▀, default), `blocks` (colored spaces), or `ascii` (legacy) |
 | `--decode WxH` | ffmpeg decode grid before resample (default `160x48`; try `240x72` or `320x90` for fullscreen) |
 | `--quality` | `best`, `worst`, `1080p`, `720p`, `480p`, `360p`, `160p` |
-| `--chars` | `classic`, `blocks`, or a custom dark→bright ramp |
-| `--no-color` | Grayscale characters only |
-| `--color` | Force truecolor ANSI |
+| `--chars` | Charset for `--mode ascii`: `classic`, `blocks`, or custom ramp |
+| `--no-color` | Grayscale block density (no ANSI colors) |
+| `--color` | 24-bit truecolor instead of 256-color palette |
 | `--no-chat` | Hide Twitch chat under the video |
 | `--chat-lines N` | Chat rows under the video (default `5`) |
 
 Exit with **Ctrl+C**. If the channel is offline, you get a clear error.
+
+## Render modes
+
+| Mode | Technique | Looks like |
+|------|-----------|------------|
+| **compact** (default) | `▀` half-blocks, fg/bg ANSI colors | [pokemon-terminal-art compact](https://github.com/shinya/pokemon-terminal-art) |
+| **blocks** | Two colored spaces per pixel | [pokemon-terminal-art normal](https://github.com/shinya/pokemon-terminal-art) |
+| **ascii** | Character density ramp | Original live-in-terminal style |
 
 ## Chat
 
